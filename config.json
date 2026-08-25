@@ -1,0 +1,23 @@
+{
+  "doppel": {
+    "seed_urls": [
+      "https://doppel.fit/@EddieFinds/eddie-find/tshirts"
+    ],
+    "profile_prefix": "https://doppel.fit/@EddieFinds/eddie-find/",
+    "discover_categories": true,
+    "max_category_pages": 30,
+    "max_product_pages": 1000
+  },
+  "links": {
+    "prefer_external_destination": true,
+    "blocked_domains": [
+      "doppel.fit",
+      "instagram.com",
+      "tiktok.com",
+      "youtube.com",
+      "facebook.com",
+      "x.com",
+      "twitter.com"
+    ]
+  }
+}

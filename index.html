@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Eddie Finds</title><link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header><a href="./">EDDIE FINDS</a></header>
+<main>
+<section class="hero"><p>CURATED FINDS</p><h1>Find your next piece.</h1></section>
+<section class="controls">
+<input id="search" type="search" placeholder="Search products or brands…">
+<div id="categories"></div>
+<div class="meta"><span id="count">0 items</span><select id="sort"><option value="featured">Featured</option><option value="newest">Newest</option><option value="az">A–Z</option></select></div>
+</section>
+<div id="status">Loading catalogue…</div><section id="grid"></section>
+</main>
+<template id="cardTemplate"><article class="card"><a class="image-link" target="_blank"><img class="product-image"></a><div class="body"><small class="product-category"></small><h2 class="product-name"></h2><div class="bottom"><span class="product-price"></span><a class="view-button" target="_blank">VIEW ITEM</a></div></div></article></template>
+<script src="script.js"></script>
+</body></html>
