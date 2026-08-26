@@ -1,40 +1,40 @@
-const SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTtd7p-OOSoZOCJ9TsnCA2DlYWieTIQrZiU5DkHhCU48HGeYjvFksGSWglq7CTyW7ueCV8yARt7fgAv/pub?gid=667735791&single=true&output=csv";
+const SHEET_URL =
+  "https://docs.google.com/spreadsheets/d/e/2PACX-1vTtd7p-OOSoZOCJ9TsnCA2DlYWieTIQrZiU5DkHhCU48HGeYjvFksGSWglq7CTyW7ueCV8yARt7fgAv/pub?gid=667735791&single=true&output=csv";
 
-let allProducts = [];
+const grid = document.getElementById("grid");
+const statusEl = document.getElementById("status");
+const count = document.getElementById("count");
+const categories = document.getElementById("categories");
+const subcategories = document.getElementById("subcategories");
+const search = document.getElementById("search");
+const sort = document.getElementById("sort");
+const template = document.getElementById("cardTemplate");
+
+let products = [];
 let activeCategory = "All";
-
-const grid = document.querySelector("#grid");
-const search = document.querySelector("#search");
-const categories = document.querySelector("#categories");
-const count = document.querySelector("#count");
-const statusEl = document.querySelector("#status");
-const sort = document.querySelector("#sort");
-const template = document.querySelector("#cardTemplate");
-
-const clean = (v) => (v ?? "").toString().trim();
+let activeSubcategory = "All";
 
 function parseCSV(text) {
   const rows = [];
   let row = [];
   let field = "";
-  let quoted = false;
+  let insideQuotes = false;
 
   for (let i = 0; i < text.length; i++) {
     const char = text[i];
-    const next = text[i + 1];
 
     if (char === '"') {
-      if (quoted && next === '"') {
+      if (insideQuotes && text[i + 1] === '"') {
         field += '"';
         i++;
       } else {
-        quoted = !quoted;
+        insideQuotes = !insideQuotes;
       }
-    } else if (char === "," && !quoted) {
+    } else if (char === "," && !insideQuotes) {
       row.push(field);
       field = "";
-    } else if ((char === "\n" || char === "\r") && !quoted) {
-      if (char === "\r" && next === "\n") i++;
+    } else if ((char === "\n" || char === "\r") && !insideQuotes) {
+      if (char === "\r" && text[i + 1] === "\n") i++;
 
       row.push(field);
       field = "";
@@ -49,12 +49,9 @@ function parseCSV(text) {
     }
   }
 
-  if (field.length || row.length) {
+  if (field || row.length) {
     row.push(field);
-
-    if (row.some(cell => cell !== "")) {
-      rows.push(row);
-    }
+    if (row.some(cell => cell !== "")) rows.push(row);
   }
 
   return rows;
@@ -63,201 +60,236 @@ function parseCSV(text) {
 function rowsToProducts(rows) {
   if (!rows.length) return [];
 
-  const headers = rows[0].map(h => clean(h));
+  const headers = rows[0].map(h => (h || "").trim());
 
-  const index = Object.fromEntries(
-    headers.map((h, i) => [h, i])
-  );
+  return rows.slice(1).map(row => {
+    const item = {};
 
-  return rows.slice(1).map(row => ({
-    id: clean(row[index["ID"]]),
-    name: clean(row[index["Name"]]),
-    brand: clean(row[index["Brand"]]),
-    category: clean(row[index["Category"]]),
-    subcategory: clean(row[index["Subcategory"]]),
-    price: clean(row[index["Price"]]),
-    currency: clean(row[index["Currency"]]),
-    image: clean(row[index["Image URL"]]),
-    link: clean(row[index["Product Link"]]),
-    featured:
-      clean(row[index["Featured"]]).toUpperCase() === "TRUE",
-    tags: clean(row[index["Tags"]]),
-    dateAdded: clean(row[index["Date Added"]]),
-    active:
-      clean(row[index["Active"]]).toUpperCase() !== "FALSE"
-  }))
-  .filter(product =>
-    product.active &&
-    product.name &&
-    product.link
-  );
+    headers.forEach((header, index) => {
+      item[header] = (row[index] || "").trim();
+    });
+
+    return item;
+  }).filter(item => {
+    const active = (item["Active"] || "").toUpperCase();
+    return item["Name"] &&
+           item["Product Link"] &&
+           active !== "FALSE";
+  });
 }
 
-function formatPrice(product) {
-  if (!product.price) return "";
+function parsePrice(item) {
+  const value = parseFloat((item["Price"] || "").replace(",", "."));
+  return Number.isFinite(value) ? value : null;
+}
 
-  const symbols = {
-    GBP: "£",
-    EUR: "€",
-    USD: "$"
-  };
+function formatPrice(item) {
+  const price = item["Price"];
+  if (!price) return "";
 
-  const value = product.price.replace(/\.00$/, "");
+  const currency = item["Currency"];
 
-  if (product.currency === "DKK") {
-    return `${value} kr`;
-  }
+  if (currency === "GBP") return "£" + price;
+  if (currency === "EUR") return "€" + price;
+  if (currency === "USD") return "$" + price;
+  if (currency === "DKK") return price + " kr";
 
-  return `${symbols[product.currency] || ""}${value}`;
+  return price;
+}
+
+function isFeatured(item) {
+  return (item["Featured"] || "").toUpperCase() === "TRUE";
 }
 
 function renderCategories() {
-  const categoryNames = [
-    ...new Set(
-      allProducts
-        .map(product => product.category)
-        .filter(Boolean)
-    )
-  ].sort((a, b) => a.localeCompare(b));
-
-  const names = ["All", ...categoryNames];
+  const list = [
+    "All",
+    ...new Set(products.map(p => p["Category"]).filter(Boolean))
+  ].sort((a, b) => {
+    if (a === "All") return -1;
+    if (b === "All") return 1;
+    return a.localeCompare(b);
+  });
 
   categories.innerHTML = "";
 
-  names.forEach(name => {
+  list.forEach(category => {
     const button = document.createElement("button");
 
     button.className =
-      "cat" + (name === activeCategory ? " active" : "");
+      "cat" + (category === activeCategory ? " active" : "");
 
-    button.textContent = name;
+    button.textContent = category;
 
-    button.addEventListener("click", () => {
-      activeCategory = name;
+    button.onclick = () => {
+      activeCategory = category;
+      activeSubcategory = "All";
       renderCategories();
-      render();
-    });
+      renderSubcategories();
+      renderProducts();
+    };
 
     categories.appendChild(button);
   });
 }
 
+function renderSubcategories() {
+  const relevant = products.filter(item =>
+    activeCategory === "All" ||
+    item["Category"] === activeCategory
+  );
+
+  const list = [
+    "All",
+    ...new Set(relevant.map(p => p["Subcategory"]).filter(Boolean))
+  ];
+
+  subcategories.innerHTML = "";
+
+  if (list.length <= 1) {
+    subcategories.style.display = "none";
+    return;
+  }
+
+  subcategories.style.display = "flex";
+
+  list.forEach(subcategory => {
+    const button = document.createElement("button");
+
+    button.className =
+      "subcat" + (subcategory === activeSubcategory ? " active" : "");
+
+    button.textContent = subcategory;
+
+    button.onclick = () => {
+      activeSubcategory = subcategory;
+      renderSubcategories();
+      renderProducts();
+    };
+
+    subcategories.appendChild(button);
+  });
+}
+
 function getFilteredProducts() {
-  const query = clean(search.value).toLowerCase();
+  const query = (search.value || "").trim().toLowerCase();
 
-  let products = allProducts.filter(product => {
-
+  let filtered = products.filter(item => {
     const categoryMatch =
       activeCategory === "All" ||
-      product.category === activeCategory;
+      item["Category"] === activeCategory;
+
+    const subcategoryMatch =
+      activeSubcategory === "All" ||
+      item["Subcategory"] === activeSubcategory;
 
     const searchable = [
-      product.name,
-      product.brand,
-      product.category,
-      product.subcategory,
-      product.tags
-    ]
-      .join(" ")
-      .toLowerCase();
+      item["Name"],
+      item["Brand"],
+      item["Category"],
+      item["Subcategory"],
+      item["Tags"]
+    ].join(" ").toLowerCase();
 
-    return (
-      categoryMatch &&
-      (!query || searchable.includes(query))
-    );
+    return categoryMatch &&
+           subcategoryMatch &&
+           (!query || searchable.includes(query));
   });
 
-  if (sort.value === "az") {
-    products.sort((a, b) =>
-      a.name.localeCompare(b.name)
-    );
+  if (sort.value === "featured") {
+    filtered.sort((a, b) => Number(isFeatured(b)) - Number(isFeatured(a)));
   }
 
   if (sort.value === "newest") {
-    products.sort((a, b) =>
-      clean(b.dateAdded).localeCompare(
-        clean(a.dateAdded)
-      )
+    filtered.sort((a, b) =>
+      (b["Date Added"] || "").localeCompare(a["Date Added"] || "")
     );
   }
 
-  if (sort.value === "featured") {
-    products.sort(
-      (a, b) =>
-        Number(b.featured) -
-        Number(a.featured)
+  if (sort.value === "az") {
+    filtered.sort((a, b) =>
+      (a["Name"] || "").localeCompare(b["Name"] || "")
     );
   }
 
-  return products;
+  if (sort.value === "priceLow") {
+    filtered.sort((a, b) => {
+      const ap = parsePrice(a);
+      const bp = parsePrice(b);
+      if (ap === null) return 1;
+      if (bp === null) return -1;
+      return ap - bp;
+    });
+  }
+
+  if (sort.value === "priceHigh") {
+    filtered.sort((a, b) => {
+      const ap = parsePrice(a);
+      const bp = parsePrice(b);
+      if (ap === null) return 1;
+      if (bp === null) return -1;
+      return bp - ap;
+    });
+  }
+
+  return filtered;
 }
 
-function render() {
-  const products = getFilteredProducts();
+function renderProducts() {
+  const filtered = getFilteredProducts();
 
   grid.innerHTML = "";
 
   count.textContent =
-    `${products.length} item${products.length === 1 ? "" : "s"}`;
+    filtered.length +
+    (filtered.length === 1 ? " item" : " items");
 
-  statusEl.hidden = true;
-
-  if (!products.length) {
-    grid.innerHTML =
-      "<p>No products found.</p>";
+  if (!filtered.length) {
+    statusEl.hidden = true;
+    grid.innerHTML = '<div class="empty">No products found.</div>';
     return;
   }
 
-  products.forEach(product => {
+  statusEl.hidden = true;
 
-    const node =
-      template.content.cloneNode(true);
+  filtered.forEach(item => {
+    const node = template.content.cloneNode(true);
 
-    const img =
-      node.querySelector(".product-image");
+    const card = node.querySelector(".product-card");
+    const image = node.querySelector(".product-image");
+    const imageLink = node.querySelector(".image-link");
+    const button = node.querySelector(".view-button");
 
-    const imageLink =
-      node.querySelector(".image-link");
+    if (isFeatured(item)) {
+      card.classList.add("is-featured");
+    }
 
-    const button =
-      node.querySelector(".view-button");
-
-    img.src =
-      product.image ||
+    image.src =
+      item["Image URL"] ||
       "https://placehold.co/800x900?text=Eddie+Finds";
 
-    img.alt = product.name;
+    image.alt = item["Name"];
 
-    img.loading = "lazy";
-
-    img.onerror = () => {
-      img.src =
-        "https://placehold.co/800x900?text=Eddie+Finds";
+    image.onerror = () => {
+      image.src = "https://placehold.co/800x900?text=Eddie+Finds";
     };
 
-    imageLink.href = product.link;
-    imageLink.rel = "noopener noreferrer";
+    imageLink.href = item["Product Link"];
+    button.href = item["Product Link"];
 
-    button.href = product.link;
-    button.rel = "noopener noreferrer";
+    const meta = [item["Category"], item["Subcategory"]]
+      .filter(Boolean)
+      .join(" / ");
 
-    node.querySelector(
-      ".product-category"
-    ).textContent =
-      product.subcategory ||
-      product.category;
+    node.querySelector(".product-meta").textContent = meta;
 
-    node.querySelector(
-      ".product-name"
-    ).textContent =
-      product.brand
-        ? `${product.brand} — ${product.name}`
-        : product.name;
+    node.querySelector(".product-name").textContent =
+      item["Brand"]
+        ? item["Brand"] + " — " + item["Name"]
+        : item["Name"];
 
-    node.querySelector(
-      ".product-price"
-    ).textContent =
-      formatPrice(product);
+    node.querySelector(".product-price").textContent =
+      formatPrice(item);
 
     grid.appendChild(node);
   });
@@ -265,58 +297,34 @@ function render() {
 
 async function loadProducts() {
   try {
-
     statusEl.hidden = false;
-
-    statusEl.textContent =
-      "Loading catalogue…";
+    statusEl.textContent = "Loading catalogue…";
 
     const response = await fetch(
-      `${SHEET_CSV_URL}&cache=${Date.now()}`
+      SHEET_URL + "&t=" + Date.now()
     );
 
     if (!response.ok) {
-      throw new Error(
-        `Google Sheets returned ${response.status}`
-      );
+      throw new Error("Google Sheets returned " + response.status);
     }
 
-    const csv = await response.text();
+    const text = await response.text();
+    const rows = parseCSV(text);
 
-    const rows = parseCSV(csv);
-
-    allProducts = rowsToProducts(rows);
+    products = rowsToProducts(rows);
 
     renderCategories();
-
-    render();
-
-    if (!allProducts.length) {
-      statusEl.hidden = false;
-
-      statusEl.textContent =
-        "No active products found. Check your Google Sheet.";
-    }
+    renderSubcategories();
+    renderProducts();
 
   } catch (error) {
-
     console.error(error);
-
     statusEl.hidden = false;
-
-    statusEl.textContent =
-      "Could not load products from Google Sheets.";
+    statusEl.textContent = "Could not load Google Sheet.";
   }
 }
 
-search.addEventListener(
-  "input",
-  render
-);
-
-sort.addEventListener(
-  "change",
-  render
-);
+search.addEventListener("input", renderProducts);
+sort.addEventListener("change", renderProducts);
 
 loadProducts();
